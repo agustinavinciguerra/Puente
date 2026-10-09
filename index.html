@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#041014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Puente Tower">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <title>Puente Tower</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; background: #041014; overflow: hidden; }
+    body { font-family: system-ui, sans-serif; color: #e1e6e8; overscroll-behavior: none; }
+    #game { position: fixed; inset: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+    #loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; gap: 18px; padding: 24px; background: #041014; }
+    #loading[hidden] { display: none; }
+    progress { width: min(70vw, 320px); accent-color: #e3ef00; }
+    #hint { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); left: 16px; right: 16px; text-align: center; font-size: 14px; }
+    #hint { pointer-events: none; }
+    #hint[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <main id="game"><canvas id="unity-canvas" tabindex="0" aria-label="Puente Tower"></canvas></main>
+  <div id="loading"><strong>Puente Tower</strong><span id="status">Cargando el juego…</span><progress id="progress" max="1" value="0"></progress></div>
+  <div id="hint" hidden>Para instalar: Safari → Compartir → Agregar a pantalla de inicio.</div>
+  <script>
+    const canvas = document.getElementById('unity-canvas');
+    const status = document.getElementById('status');
+    const progress = document.getElementById('progress');
+    const config = {
+      dataUrl: 'Build/' + "PuentePWA.data",
+      frameworkUrl: 'Build/' + "PuentePWA.framework.js",
+      codeUrl: 'Build/' + "PuentePWA.wasm",
+      streamingAssetsUrl: 'StreamingAssets',
+      companyName: "DefaultCompany",
+      productName: "Puente",
+      productVersion: "0.1",
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+      showBanner: (message, type) => { if (type === 'error') { status.textContent = message; document.getElementById('loading').hidden = false; } }
+    };
+    if (!window.WebAssembly || !canvas.getContext('webgl2')) {
+      status.textContent = 'Este juego necesita WebGL 2. Actualizá iPadOS y abrilo con Safari.';
+      progress.hidden = true;
+    } else {
+      const loader = document.createElement('script');
+      loader.src = 'Build/' + "PuentePWA.loader.js";
+      loader.onerror = () => { status.textContent = 'No pudimos cargar el juego. Revisá tu conexión y volvé a abrirlo.'; };
+      loader.onload = () => createUnityInstance(canvas, config, value => { progress.value = value; })
+        .then(instance => {
+          // Un solo evento por toque/click; no depende de la emulacion de mouse de Safari.
+          window.addEventListener('pointerdown', event => {
+            if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+            event.preventDefault();
+            canvas.focus({ preventScroll: true });
+            instance.SendMessage('PuenteInput', 'OnWebTap');
+          }, { passive: false, capture: true });
+          document.getElementById('loading').hidden = true;
+          const installed = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+          if (!installed && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
+            const hint = document.getElementById('hint'); hint.hidden = false;
+            setTimeout(() => { hint.hidden = true; }, 8000);
+          }
+          if ('serviceWorker' in navigator && window.isSecureContext) {
+            navigator.serviceWorker.register('sw.js').catch(error => console.warn('Offline cache unavailable:', error));
+          }
+        }).catch(() => { status.textContent = 'No pudimos iniciar el juego. Cerrá otras pestañas y volvé a intentarlo.'; progress.hidden = true; });
+      document.body.appendChild(loader);
+    }
+  </script>
+</body>
+</html>
